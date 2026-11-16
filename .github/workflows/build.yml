@@ -2,9 +2,9 @@ name: build
 
 on:
   push:
-    branches: [mod]
+    branches: [main]
   pull_request:
-    branches: [mod]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
