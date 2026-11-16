@@ -36,7 +36,7 @@ class AppTheme {
   /// 深色主题保持原样。
   static Color accentForeground(ColorScheme scheme) {
     if (scheme.brightness == Brightness.dark) return scheme.primary;
-    return Color.lerp(scheme.primary, const Color(0xFF11170F), 0.45)!;
+    return Color.lerp(scheme.primary, const Color(0xFF141414), 0.45)!;
   }
 
   static ThemeData build(Color seed, Brightness brightness) {
@@ -45,15 +45,15 @@ class AppTheme {
         ColorScheme.fromSeed(
           seedColor: seed,
           brightness: brightness,
-          surface: isDark ? const Color(0xFF171C14) : const Color(0xFFF8FAF6),
+          surface: isDark ? const Color(0xFF1A1A1A) : const Color(0xFFFAFAFA),
         ).copyWith(
           primary: seed,
           secondary: seed,
           // primary 被换成粉彩色后，浅色主题的 onPrimary 仍是白色：白字压浅底几乎看不清。
-          onPrimary: isDark ? null : const Color(0xFF10160E),
+          onPrimary: isDark ? null : const Color(0xFF141414),
           outlineVariant: isDark
-              ? const Color(0xFF2B3327)
-              : const Color(0xFFE2E9DD),
+              ? const Color(0xFF333333)
+              : const Color(0xFFE5E5E5),
         );
 
     final base = ThemeData(
@@ -62,8 +62,8 @@ class AppTheme {
       colorScheme: scheme,
       fontFamily: fontFamily,
       scaffoldBackgroundColor: isDark
-          ? const Color(0xFF0F130D)
-          : const Color(0xFFF3F7F0),
+          ? const Color(0xFF141414)
+          : const Color(0xFFF5F5F5),
       splashFactory: InkRipple.splashFactory,
     );
 
@@ -129,28 +129,28 @@ class AppTheme {
         fontFamily: bodyFontFamily,
         fontFamilyFallback: bodyFontFamilyFallback,
       ),
-      dividerColor: isDark ? const Color(0xFF242B21) : const Color(0xFFE7EDE2),
+      dividerColor: isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE8E8E8),
       cardTheme: CardThemeData(
         elevation: 0,
         color: isDark
-            ? const Color(0xFF1A2118)
+            ? const Color(0xFF232323)
             : Colors.white.withValues(alpha: 0.82),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         clipBehavior: Clip.antiAlias,
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: isDark
-            ? const Color(0xFF1A2118)
-            : const Color(0xFFFDFEFA),
+            ? const Color(0xFF232323)
+            : const Color(0xFFFFFFFF),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: isDark
-            ? const Color(0xFF171C14)
-            : const Color(0xFFFDFEFA),
+            ? const Color(0xFF1A1A1A)
+            : const Color(0xFFFFFFFF),
         modalBackgroundColor: isDark
-            ? const Color(0xFF171C14)
-            : const Color(0xFFFDFEFA),
+            ? const Color(0xFF1A1A1A)
+            : const Color(0xFFFFFFFF),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
@@ -159,7 +159,7 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: isDark
-            ? const Color(0xFF1D241A)
+            ? const Color(0xFF232323)
             : Colors.white.withValues(alpha: 0.78),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 18,
@@ -172,7 +172,7 @@ class AppTheme {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(18),
           borderSide: BorderSide(
-            color: isDark ? const Color(0xFF2A3226) : const Color(0xFFE3EBDE),
+            color: isDark ? const Color(0xFF383838) : const Color(0xFFE5E5E5),
           ),
         ),
         focusedBorder: OutlineInputBorder(
@@ -183,8 +183,8 @@ class AppTheme {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         backgroundColor: isDark
-            ? const Color(0xFF2B3327)
-            : const Color(0xFF25301F),
+            ? const Color(0xFF333333)
+            : const Color(0xFF232323),
         contentTextStyle: const TextStyle(
           fontFamily: bodyFontFamily,
           fontFamilyFallback: bodyFontFamilyFallback,
@@ -198,7 +198,7 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         // 浅色主题必须显式给标签颜色：只覆盖字重/字号会让 Chip 丢掉颜色，
         // 未选中的线路标签几乎渲染成白色，完全看不清。深色主题保持原样。
-        backgroundColor: isDark ? null : const Color(0xFFE7EDE1),
+        backgroundColor: isDark ? null : const Color(0xFFEBEBEB),
         selectedColor: isDark ? null : scheme.secondaryContainer,
         labelStyle: isDark
             ? const TextStyle(
