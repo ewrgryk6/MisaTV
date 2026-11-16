@@ -284,13 +284,13 @@ const kPlayerOverlayMetrics = <PlayerOverlayMetric>[
   PlayerOverlayMetric('rate', '播放倍速', 'br'),
 ];
 
+/// 默认只留剧名 / 集数 / 时钟：分辨率、进度、网速这类技术指标与
+/// 进度条自带的信息重复，奈飞式播放器默认不展示；需要时可在
+/// 设置里把任意指标加回悬浮层（全集见 [kPlayerOverlayMetrics]）。
 const kDefaultPlayerOverlayMetrics = <String>[
   'title',
   'episode',
-  'resolution',
   'clock',
-  'progress',
-  'net',
 ];
 
 /// 直播「详情」悬浮层指标：和点播共用四角布局与开关，但内容换成频道 /
@@ -393,8 +393,7 @@ class PlayerSettings {
     this.keepSpiderHosts = false,
     this.externalPlayers = const [],
     this.defaultPlayer = kDefaultPlayerBuiltin,
-    this.immersiveMode = false,
-    this.immersiveFontScale = 1.0,
+    this.immersiveMode = true,
     this.popOutPlayer = false,
     this.artworkPriority = 'douban',
     this.tmdbApiKey = '',
@@ -429,9 +428,6 @@ class PlayerSettings {
 
   /// 沉浸观影模式：除播放器外的页面切换为大屏 TV 布局。
   final bool immersiveMode;
-
-  /// 沉浸观影模式的大屏字号倍率：1.0 = 标准，1.1 = 大，1.2 = 特大。
-  final double immersiveFontScale;
 
   /// 内置播放器独立窗口：在主界面之外另开一个完整播放器窗口；
   /// false = 与现在一样嵌入软件主界面。沉浸观影模式下不生效。
@@ -484,7 +480,6 @@ class PlayerSettings {
     List<ExternalPlayerEntry>? externalPlayers,
     String? defaultPlayer,
     bool? immersiveMode,
-    double? immersiveFontScale,
     bool? popOutPlayer,
     String? artworkPriority,
     String? tmdbApiKey,
@@ -515,7 +510,6 @@ class PlayerSettings {
     externalPlayers: externalPlayers ?? this.externalPlayers,
     defaultPlayer: normalizeDefaultPlayer(defaultPlayer ?? this.defaultPlayer),
     immersiveMode: immersiveMode ?? this.immersiveMode,
-    immersiveFontScale: immersiveFontScale ?? this.immersiveFontScale,
     popOutPlayer: popOutPlayer ?? this.popOutPlayer,
     artworkPriority: normalizeArtworkPriority(
       artworkPriority ?? this.artworkPriority,
@@ -595,7 +589,6 @@ class PlayerSettings {
     'externalPlayers': externalPlayers.map((e) => e.toJson()).toList(),
     'defaultPlayer': defaultPlayer,
     'immersiveMode': immersiveMode,
-    'immersiveFontScale': immersiveFontScale,
     'popOutPlayer': popOutPlayer,
     'artworkPriority': artworkPriority,
     'tmdbApiKey': tmdbApiKey,
@@ -656,9 +649,6 @@ class PlayerSettings {
       (j['defaultPlayer'] ?? '').toString(),
     ),
     immersiveMode: (j['immersiveMode'] as bool?) ?? false,
-    immersiveFontScale: ((j['immersiveFontScale'] as num?)?.toDouble() ?? 1.0)
-        .clamp(1.0, 1.5)
-        .toDouble(),
     popOutPlayer: (j['popOutPlayer'] as bool?) ?? false,
     artworkPriority: normalizeArtworkPriority(
       (j['artworkPriority'] ?? '').toString(),
