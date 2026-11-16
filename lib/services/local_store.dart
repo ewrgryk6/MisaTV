@@ -33,8 +33,6 @@ class LocalStore {
   static const kNavBarAutoHide = 'kniephos.navBarAutoHide';
   static const kHomeColumns = 'kniephos.homeColumns';
   static const kHomeBrowseMode = 'kniephos.homeBrowseMode';
-  static const kLiveLayoutMode = 'kniephos.liveLayoutMode';
-  static const kLiveFavorites = 'kniephos.liveFavorites';
   static const kShowMovieQuotes = 'kniephos.showMovieQuotes';
   static const kFavorites = 'kniephos.favorites';
   static const kHistory = 'kniephos.history';
@@ -284,7 +282,7 @@ class LocalStore {
   Future<void> setEulaAccepted(bool value) =>
       _prefs.setBool(kEulaAccepted, value);
 
-  String get themeMode => _prefs.getString(kThemeMode) ?? 'system';
+  String get themeMode => _prefs.getString(kThemeMode) ?? 'dark';
   Future<void> setThemeMode(String mode) => _prefs.setString(kThemeMode, mode);
 
   int get accentIndex => _prefs.getInt(kAccentIndex) ?? 0;
@@ -307,17 +305,6 @@ class LocalStore {
   int get homeBrowseMode => _prefs.getInt(kHomeBrowseMode) ?? 0;
   Future<void> setHomeBrowseMode(int value) =>
       _prefs.setInt(kHomeBrowseMode, value);
-
-  /// 直播页频道布局：0 = 网格（一行多个），1 = 平铺（一行一个，完整显示标题）。
-  int get liveLayoutMode => _prefs.getInt(kLiveLayoutMode) ?? 0;
-  Future<void> setLiveLayoutMode(int value) =>
-      _prefs.setInt(kLiveLayoutMode, value);
-
-  /// 收藏的直播频道（`直播源|分组|频道名`）。
-  List<String> loadLiveFavorites() =>
-      _prefs.getStringList(kLiveFavorites) ?? const [];
-  Future<void> saveLiveFavorites(List<String> keys) =>
-      _prefs.setStringList(kLiveFavorites, keys);
 
   /// 首页顶部是否显示影视台词轮换。
   bool get showMovieQuotes => _prefs.getBool(kShowMovieQuotes) ?? true;
