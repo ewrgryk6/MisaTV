@@ -12,6 +12,7 @@ import '../core/net/url_utils.dart';
 import '../core/utils/json_utils.dart';
 import '../models/dav.dart';
 import '../models/drive_account.dart';
+import '../models/live.dart';
 import '../models/media_server.dart';
 import '../models/site_config.dart';
 import '../models/source_health.dart';
@@ -305,6 +306,12 @@ class AppState extends ChangeNotifier {
 
   /// 首页分类浏览方式：0 = 换页（上一页 / 下一页），1 = 瀑布（滑到底自动加载）。
   int homeBrowseMode = 0;
+
+  /// 直播页频道布局：0 = 网格（一行多个），1 = 平铺（一行一个，完整显示标题）。
+  int liveLayoutMode = 0;
+
+  /// 收藏的直播频道（`直播源|分组|频道名`），跨启动保留。
+  Set<String> liveFavorites = <String>{};
 
   /// 首页顶部是否显示影视台词轮换。
   bool showMovieQuotes = false;
@@ -858,6 +865,8 @@ class AppState extends ChangeNotifier {
     navBarAutoHide = store.navBarAutoHide;
     homeColumns = store.homeColumns <= 0 ? 0 : store.homeColumns.clamp(4, 8);
     homeBrowseMode = store.homeBrowseMode == 1 ? 1 : 0;
+    liveLayoutMode = store.liveLayoutMode == 1 ? 1 : 0;
+    liveFavorites = store.loadLiveFavorites().toSet();
     showMovieQuotes = store.showMovieQuotes;
     rememberedWindowSize = store.loadWindowSize();
     eulaAccepted = store.eulaAccepted;
@@ -2737,6 +2746,7 @@ class AppState extends ChangeNotifier {
     'navBarAutoHide': navBarAutoHide,
     'homeColumns': homeColumns,
     'homeBrowseMode': homeBrowseMode,
+    'liveLayoutMode': liveLayoutMode,
     'showMovieQuotes': showMovieQuotes,
   };
 
@@ -2899,6 +2909,10 @@ class AppState extends ChangeNotifier {
         ((data['homeBrowseMode'] as num?)?.toInt() ?? homeBrowseMode) == 1
         ? 1
         : 0;
+    liveLayoutMode =
+        ((data['liveLayoutMode'] as num?)?.toInt() ?? liveLayoutMode) == 1
+        ? 1
+        : 0;
     showMovieQuotes = data['showMovieQuotes'] as bool? ?? showMovieQuotes;
 
     if (data['kazumiRules'] is List) {
@@ -2951,6 +2965,7 @@ class AppState extends ChangeNotifier {
     await store.setNavBarAutoHide(navBarAutoHide);
     await store.setHomeColumns(homeColumns);
     await store.setHomeBrowseMode(homeBrowseMode);
+    await store.setLiveLayoutMode(liveLayoutMode);
     await store.setShowMovieQuotes(showMovieQuotes);
     await _purgeUnusedJars();
     notifyListeners();
@@ -3013,6 +3028,27 @@ class AppState extends ChangeNotifier {
     if (next == homeBrowseMode) return;
     homeBrowseMode = next;
     await store.setHomeBrowseMode(next);
+    notifyListeners();
+  }
+
+  /// 切换直播页频道布局：0 = 网格，1 = 平铺（一行一个频道）。
+  Future<void> setLiveLayoutMode(int value) async {
+    final next = value == 1 ? 1 : 0;
+    if (next == liveLayoutMode) return;
+    liveLayoutMode = next;
+    await store.setLiveLayoutMode(next);
+    notifyListeners();
+  }
+
+  /// 直播频道的收藏键：源名 + 分组 + 频道名，订阅地址变动后仍能命中。
+  String liveChannelKey(LiveBean bean, String group, LiveChannel channel) =>
+      '${bean.name}|$group|${channel.name}';
+
+  bool isLiveFavorite(String key) => liveFavorites.contains(key);
+
+  Future<void> toggleLiveFavorite(String key) async {
+    if (!liveFavorites.remove(key)) liveFavorites.add(key);
+    await store.saveLiveFavorites(liveFavorites.toList()..sort());
     notifyListeners();
   }
 
