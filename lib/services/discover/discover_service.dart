@@ -828,7 +828,7 @@ DoubanInfo? parseDoubanInfo(
     title: title,
     year: (json['year'] ?? '').toString().trim(),
     intro: oneLineText((json['intro'] ?? '').toString(), 1200),
-    rating: ratingObj is Map ? _asDouble(ratingObj['value']) : null,
+    rating: ratingObj is Map ? _ratingOrNull(ratingObj['value']) : null,
     cover: pic is Map
         ? ((pic['large'] ?? pic['normal'] ?? '')).toString().trim()
         : '',
@@ -936,7 +936,7 @@ List<DoubanExtraItem> parseDoubanRecommendations(Object? json) {
         ? ((pic['large'] ?? pic['normal'] ?? '')).toString().trim()
         : '';
     final rating = raw['rating'] is Map
-        ? _asDouble((raw['rating'] as Map)['value'])
+        ? _ratingOrNull((raw['rating'] as Map)['value'])
         : null;
     out.add(
       DoubanExtraItem(
@@ -1032,4 +1032,12 @@ double? _asDouble(Object? value) {
   if (value is num) return value.toDouble();
   if (value is String) return double.tryParse(value);
   return null;
+}
+
+/// 豆瓣评分：0 表示「暂无评分」而不是真的 0 分，归一成 null，
+/// 否则详情页会把「豆瓣 0.0」当真评分展示出来。
+double? _ratingOrNull(Object? value) {
+  final rating = _asDouble(value);
+  if (rating == null || rating <= 0 || rating > 10) return null;
+  return rating;
 }
