@@ -63,30 +63,16 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
     () => FocusNode(debugLabel: 'immersive-card-$key'),
   );
 
-  /// 卡片 key 用「货架标题 + 条目 + 序号」而不是纯下标：
-  /// 「继续观看」插到最前面时，其它货架的下标会整体后移，
-  /// 纯下标会让焦点记忆指向另一张卡。
-  String _shelfKey(int shelfIndex, int itemIndex) {
-    final shelf = _shelves[shelfIndex];
-    final entry = shelf.items[itemIndex];
-    final id = entry.item?.id ?? entry.fallback;
-    return '${shelf.title}|${entry.title}|$id|$itemIndex';
-  }
-
   /// 货架内容变化后：同步有效 key，释放已消失卡片的节点。
   void _syncFocusKeys() {
     final keys = <String>[
       for (var s = 0; s < _shelves.length; s++)
-        for (var i = 0; i < _shelves[s].items.length; i++) _shelfKey(s, i),
+        for (var i = 0; i < _shelves[s].items.length; i++) '$s:$i',
       for (var i = 0; i < _classes.length; i++) 'cls:$i',
     ];
     final removed = _focusMemory.syncKeys(keys);
     for (final key in removed) {
-      final node = _focusNodes.remove(key);
-      // 等旧卡片先卸载再释放节点，避免 Focus 还在树上时节点已 dispose。
-      if (node != null) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => node.dispose());
-      }
+      _focusNodes.remove(key)?.dispose();
     }
   }
 
@@ -113,7 +99,6 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
       _site = null;
       _total = 0;
     });
-    _syncFocusKeys();
     if (site == null) {
       setState(() => _loading = false);
       return;
@@ -131,24 +116,35 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
             if (cls.id.trim().isNotEmpty && cls.name.trim().isNotEmpty) cls,
         ];
         _hero = [
-          for (final item in items.take(6)) _heroItemOf(item, site, app),
+          for (final item in items.take(6))
+            ImmersiveHeroItem(
+              title: item.name,
+              year: _validYear(item.year) ? item.year : '',
+              subtitle: _heroSubtitle(item, site),
+              description: _heroDescription(item),
+              fallback: item.cleanPic,
+              actionLabel: '查看详情',
+              onTap: () => openImmersiveItem(context, item),
+            ),
         ];
         _shelves = [
           if (items.isNotEmpty)
             (
               title: '当前源 · 热门',
-              items: [for (final item in items.take(24)) _entryOf(item, site)],
+              items: _filterSeen(
+                [for (final item in items.take(24)) _entryOf(item, site)],
+                <String>{},
+              ),
             ),
         ];
       });
-      _syncFocusKeys();
-      if (items.isNotEmpty) _restoreFocusSoon();
       if (items.isEmpty) {
         await _loadDoubanFallback(app);
         await _loadContinueWatching(app);
         return;
       }
       unawaited(_loadCategoryShelves(app, site, data.classes, key));
+      unawaited(_loadDoubanShelves(app, key));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -174,7 +170,6 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
           fallback: item.pic,
           badge: item.episodeName.isEmpty ? '' : item.episodeName,
           progress: item.progress,
-          resume: true,
           item: VodItem(
             id: item.vodId,
             name: item.name,
@@ -191,7 +186,6 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
         ..._shelves,
       ];
     });
-    _syncFocusKeys();
   }
 
   Future<void> _loadCategoryShelves(
@@ -215,16 +209,56 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
         if (!mounted || key != (app.activeSiteKey ?? '')) return;
         final items = result.items.take(20).toList();
         if (items.isEmpty) continue;
+        final fresh = _filterSeen(
+          [for (final item in items) _entryOf(item, site)],
+          _shelfSeen(),
+        );
+        if (fresh.isEmpty) continue;
         setState(() {
           _shelves = [
             ..._shelves,
-            (title: cls.name, items: [for (final item in items) _entryOf(item, site)]),
+            (title: cls.name, items: fresh),
           ];
         });
-        _syncFocusKeys();
       } catch (_) {
         // 单个分类失败不影响其它货架
       }
+    }
+  }
+
+  /// 豆瓣精选货架：有站点内容时也追加（此前只有空站点回退才出现）。
+  /// 条目点开走全源搜索，与回退路径一致；与已有货架按标题去重。
+  Future<void> _loadDoubanShelves(AppState app, String key) async {
+    try {
+      final sections = await app.discoverService.loadSections();
+      if (!mounted || key != (app.activeSiteKey ?? '')) return;
+      final seen = _shelfSeen();
+      final additions = <({String title, List<_HomeEntry> items})>[];
+      for (final section in sections) {
+        if (section.items.isEmpty) continue;
+        final entries = _filterSeen(
+          [
+            for (final item in section.items.take(20))
+              _HomeEntry(
+                title: item.title,
+                year: item.year?.toString() ?? '',
+                subtitle: item.mediaType == 'tv' ? '剧集 · 全源搜索' : '电影 · 全源搜索',
+                fallback: item.posterUrl,
+              ),
+          ],
+          seen,
+        );
+        if (entries.isEmpty) continue;
+        additions.add((title: '豆瓣精选 · ${section.title}', items: entries));
+        if (additions.length >= 3) break;
+      }
+      if (additions.isEmpty || !mounted) return;
+      setState(() {
+        _shelves = [..._shelves, ...additions];
+      });
+      _syncFocusKeys();
+    } catch (_) {
+      // 豆瓣精选是锦上添花：失败时静默，首页其余货架不受影响。
     }
   }
 
@@ -236,6 +270,25 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
       final filled = [for (final s in sections) if (s.items.isNotEmpty) s];
       if (filled.isEmpty) return;
       final heroSource = filled.first.items.take(6).toList();
+      final seen = <String>{};
+      final dedupedSections = [
+        for (final section in filled.take(4))
+          (
+            title: section.title,
+            items: _filterSeen(
+              [
+                for (final item in section.items.take(20))
+                  _HomeEntry(
+                    title: item.title,
+                    year: item.year?.toString() ?? '',
+                    subtitle: item.mediaType == 'tv' ? '剧集' : '电影',
+                    fallback: item.posterUrl,
+                  ),
+              ],
+              seen,
+            ),
+          ),
+      ];
       setState(() {
         _hero = [
           for (final item in heroSource)
@@ -249,19 +302,8 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
             ),
         ];
         _shelves = [
-          for (final section in filled.take(4))
-            (
-              title: section.title,
-              items: [
-                for (final item in section.items.take(20))
-                  _HomeEntry(
-                    title: item.title,
-                    year: item.year?.toString() ?? '',
-                    subtitle: item.mediaType == 'tv' ? '剧集' : '电影',
-                    fallback: item.posterUrl,
-                  ),
-              ],
-            ),
+          for (final section in dedupedSections)
+            if (section.items.isNotEmpty) section,
         ];
         _loading = false;
       });
@@ -277,47 +319,15 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
   }
 
   /// 等一帧再恢复焦点：卡片要先进树，FocusNode 才能被 requestFocus。
-  ///
-  /// 不用「第一张卡」兜底：首页首屏是整屏 Hero，强行聚焦屏幕外的卡片
-  /// 会让用户按回车打开一个看不见的条目。没有记忆时把焦点留给顶部 Tab。
   void _restoreFocusSoon() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final target = _focusMemory.restoreTarget();
+      final target = _focusMemory.restoreTarget(fallback: '0:0');
       if (target == null) return;
       final node = _focusNodes[target];
       if (node == null || !node.canRequestFocus) return;
-      final context = node.context;
-      if (context != null) {
-        unawaited(
-          Scrollable.ensureVisible(
-            context,
-            alignment: 0.5,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOutCubic,
-          ),
-        );
-      }
       node.requestFocus();
     });
-  }
-
-  ImmersiveHeroItem _heroItemOf(VodItem item, SourceBean site, AppState app) {
-    final history = app.historyFor(item.sourceKey, item.id);
-    final canResume = history != null && history.positionMs > 0;
-    return ImmersiveHeroItem(
-      title: item.name,
-      year: _validYear(item.year) ? item.year : '',
-      subtitle: _heroSubtitle(item, site),
-      description: _heroDescription(item),
-      fallback: item.cleanPic,
-      actionLabel: canResume ? '继续播放' : '查看详情',
-      onTap: () => openImmersiveItem(
-        context,
-        item,
-        autoPlay: canResume,
-      ),
-    );
   }
 
   String _heroSubtitle(VodItem item, SourceBean site) {
@@ -341,6 +351,37 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
     return value != null && value >= 1900 && value <= 2100;
   }
 
+  /// 跨货架去重键：同一站点同一条目只在第一个货架出现一次。
+  /// 「继续观看」不参与去重（奈飞的继续观看行同样会与推荐行重复）。
+  String _entryKey(_HomeEntry entry) {
+    final item = entry.item;
+    if (item != null && item.id.isNotEmpty) {
+      return '${item.sourceKey}|${item.id}';
+    }
+    return 'title:${entry.title.trim().toLowerCase()}';
+  }
+
+  /// 过滤掉 [seen] 里已有的条目，并把新条目的键登记进去。
+  List<_HomeEntry> _filterSeen(List<_HomeEntry> entries, Set<String> seen) {
+    final out = <_HomeEntry>[];
+    for (final entry in entries) {
+      if (seen.add(_entryKey(entry))) out.add(entry);
+    }
+    return out;
+  }
+
+  /// 当前已上架货架（不含「继续观看」）的全部去重键。
+  Set<String> _shelfSeen() {
+    final seen = <String>{};
+    for (final shelf in _shelves) {
+      if (shelf.title == '继续观看') continue;
+      for (final entry in shelf.items) {
+        seen.add(_entryKey(entry));
+      }
+    }
+    return seen;
+  }
+
   _HomeEntry _entryOf(VodItem item, SourceBean site) => _HomeEntry(
     title: item.name,
     year: item.year,
@@ -349,44 +390,13 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
     item: item,
   );
 
-  void _open(_HomeEntry entry, {bool? autoPlay, bool fromStart = false}) {
+  void _open(_HomeEntry entry) {
     final item = entry.item;
     if (item != null) {
-      openImmersiveItem(
-        context,
-        item,
-        autoPlay: autoPlay ?? entry.resume,
-        fromStart: fromStart,
-      );
+      openImmersiveItem(context, item);
       return;
     }
     AppScope.of(context).requestSearch(entry.title);
-  }
-
-  /// 继续观看卡的上下文菜单：继续 / 从头 / 详情。
-  void _showEntryMenu(_HomeEntry entry) {
-    if (entry.item == null) return;
-    showImmersiveActionMenu(
-      context,
-      title: entry.title,
-      actions: [
-        (
-          icon: Icons.play_arrow_rounded,
-          label: '继续播放',
-          onTap: () => _open(entry, autoPlay: true),
-        ),
-        (
-          icon: Icons.replay_rounded,
-          label: '从头播放',
-          onTap: () => _open(entry, autoPlay: true, fromStart: true),
-        ),
-        (
-          icon: Icons.info_outline_rounded,
-          label: '查看详情',
-          onTap: () => _open(entry, autoPlay: false),
-        ),
-      ],
-    );
   }
 
   void _openCategory(SortClass cls) {
@@ -437,9 +447,6 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
     // 这比自己算网格更稳（货架是横向滚动 + 多个分架的混合布局）。
     return Focus(
       focusNode: _rootFocus,
-      // 只作为货架卡片的焦点容器，本身不参与遍历，避免方向键停在空白节点。
-      canRequestFocus: false,
-      skipTraversal: true,
       child: ScrollConfiguration(
         behavior: const MouseDragScrollBehavior(),
         child: SingleChildScrollView(
@@ -558,15 +565,10 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
                   padding: const EdgeInsets.symmetric(horizontal: 56),
                   itemCount: _classes.length,
                   separatorBuilder: (_, _) => const SizedBox(width: 10),
-                  itemBuilder: (context, index) {
-                    final key = 'cls:$index';
-                    return _CategoryChip(
-                      label: _classes[index].name,
-                      focusNode: _focusNodeFor(key),
-                      onFocus: () => _focusMemory.remember(key),
-                      onTap: () => _openCategory(_classes[index]),
-                    );
-                  },
+                  itemBuilder: (context, index) => _CategoryChip(
+                    label: _classes[index].name,
+                    onTap: () => _openCategory(_classes[index]),
+                  ),
                 ),
               ),
             ),
@@ -578,10 +580,10 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
               child: ImmersiveShelf(
                 title: _shelves[shelfIndex].title,
                 itemCount: _shelves[shelfIndex].items.length,
-                height: 232,
+                height: 262,
                 itemBuilder: (context, index) {
                   final entry = _shelves[shelfIndex].items[index];
-                  final key = _shelfKey(shelfIndex, index);
+                  final key = '$shelfIndex:$index';
                   return ImmersiveCard(
                     title: entry.title,
                     year: entry.year,
@@ -598,12 +600,6 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
                       _focusMemory.remember(key);
                       _open(entry);
                     },
-                    onLongPress: entry.resume
-                        ? () => _showEntryMenu(entry)
-                        : null,
-                    onSecondaryTap: entry.resume
-                        ? () => _showEntryMenu(entry)
-                        : null,
                   );
                 },
               ),
@@ -618,45 +614,46 @@ class _ImmersiveHomePageState extends State<ImmersiveHomePage> {
   }
 }
 
-class _CategoryChip extends StatelessWidget {
-  const _CategoryChip({
-    required this.label,
-    required this.onTap,
-    this.focusNode,
-    this.onFocus,
-  });
+class _CategoryChip extends StatefulWidget {
+  const _CategoryChip({required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;
-  final FocusNode? focusNode;
-  final VoidCallback? onFocus;
+
+  @override
+  State<_CategoryChip> createState() => _CategoryChipState();
+}
+
+class _CategoryChipState extends State<_CategoryChip> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ImmersiveFocusable(
-      focusNode: focusNode,
-      onTap: onTap,
-      onFocusChange: (focused) {
-        if (focused) onFocus?.call();
-      },
-      builder: (context, active) => AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: active ? 0.13 : 0.07),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: active
-                ? theme.colorScheme.primary.withValues(alpha: 0.55)
-                : Colors.white.withValues(alpha: 0.08),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: _hover ? 0.13 : 0.07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: _hover
+                  ? theme.colorScheme.primary.withValues(alpha: 0.55)
+                  : Colors.white.withValues(alpha: 0.08),
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            color: Colors.white.withValues(alpha: active ? 0.96 : 0.78),
+          child: Text(
+            widget.label,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: _hover ? 0.96 : 0.78),
+            ),
           ),
         ),
       ),
@@ -672,7 +669,6 @@ class _HomeEntry {
     this.fallback = '',
     this.badge = '',
     this.progress = 0,
-    this.resume = false,
     this.item,
   });
 
@@ -682,8 +678,5 @@ class _HomeEntry {
   final String fallback;
   final String badge;
   final double progress;
-
-  /// 继续观看 / 历史条目：点击直接续播，并带上下文菜单。
-  final bool resume;
   final VodItem? item;
 }
